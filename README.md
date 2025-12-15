@@ -71,7 +71,7 @@ curl -X GET "http://localhost:8000/forecast/2024/9"
   "forecasts": [
     {"grade": "B500A", "product_group": "Rebar", "heats": 86},
     {"grade": "B500B", "product_group": "Rebar", "heats": 105},
-    ...
+    {"..."},
   ]
 }
 ```
