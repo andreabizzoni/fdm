@@ -100,6 +100,10 @@ __Note: The forecast is currently only avaiable for Sep 2024 production. If you 
 
 ## Database Schema
 
+To access the database, I recommend using [TablePlus](https://tableplus.com/), but any db manager will do.
+
+The following tables get created at startup and are used to store relevant data:
+
 ```
 product_groups (id, name)
 steel_grades (id, name, product_group_id)
