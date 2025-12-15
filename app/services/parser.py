@@ -1,44 +1,16 @@
-"""
-Excel file parsing logic for the three input file types:
-1. daily_charge_schedule.xlsx - Daily heat schedules
-2. product_groups_monthly.xlsx - Monthly forecasts by product group
-3. steel_grade_production.xlsx - Historical production by steel grade
-"""
-
 from datetime import date, time, datetime
 from pathlib import Path
 from typing import BinaryIO
 
 import pandas as pd
-from pydantic import BaseModel
+
+from app.schemas import (
+    DailyScheduleRecord,
+    MonthlyForecastRecord,
+    ProductionHistoryRecord,
+)
 
 FileInput = str | Path | BinaryIO
-
-
-class DailyScheduleRecord(BaseModel):
-    """Represents a single heat from the daily schedule."""
-
-    date: date
-    start_time: time
-    grade: str
-    mould_size: str | None = None
-
-
-class MonthlyForecastRecord(BaseModel):
-    """Represents a monthly forecast for a product group."""
-
-    product_group: str
-    month: date
-    heats: int
-
-
-class ProductionHistoryRecord(BaseModel):
-    """Represents historical production for a steel grade."""
-
-    product_group: str
-    grade: str
-    month: date
-    tons: float
 
 
 class Parser:
@@ -330,49 +302,3 @@ class Parser:
                             continue
 
         return records
-
-
-if __name__ == "__main__":
-    from pathlib import Path
-
-    # Path to data files
-    data_dir = Path(__file__).parent.parent / "data"
-
-    print("=" * 60)
-    print("Testing Daily Schedule Parser")
-    print("=" * 60)
-    daily_records = Parser.parse_daily_schedule(data_dir / "daily_charge_schedule.xlsx")
-    print(f"Parsed {len(daily_records)} daily schedule records")
-    if daily_records:
-        print(f"First record: {daily_records[0]}")
-        print(f"Last record: {daily_records[-1]}")
-
-    print("\n" + "=" * 60)
-    print("Testing Monthly Forecast Parser")
-    print("=" * 60)
-    forecast_records = Parser.parse_monthly_forecast(
-        data_dir / "product_groups_monthly.xlsx"
-    )
-    print(f"Parsed {len(forecast_records)} monthly forecast records")
-    for record in forecast_records:
-        print(
-            f"  {record.product_group}: {record.month.strftime('%b %Y')} = {record.heats} heats"
-        )
-
-    print("\n" + "=" * 60)
-    print("Testing Production History Parser")
-    print("=" * 60)
-    history_records = Parser.parse_production_history(
-        data_dir / "steel_grade_production.xlsx"
-    )
-    print(f"Parsed {len(history_records)} production history records")
-    if history_records:
-        print(f"First record: {history_records[0]}")
-        print(f"Last record: {history_records[-1]}")
-        # Group by product group for summary
-        groups = {}
-        for r in history_records:
-            groups.setdefault(r.product_group, []).append(r.grade)
-        print("\nGrades by product group:")
-        for group, grades in groups.items():
-            print(f"  {group}: {list(set(grades))}")

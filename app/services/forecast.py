@@ -1,12 +1,4 @@
-"""
-Forecast calculation logic.
-
-Distributes heats across steel grades within each product group
-based on historical production ratios.
-"""
-
 from datetime import date
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models import MonthlyForecast, ProductGroup, ProductionHistory, SteelGrade
@@ -14,7 +6,13 @@ from app.schemas import GradeForecast
 
 
 class Forecaster:
-    """Calculates heat distribution forecasts based on historical production."""
+    """Calculates heat distribution forecasts based on historical production.
+
+    Uses weighted recent history: more recent months have higher influence.
+    Weights: most recent = 3x, second = 2x, third = 1x
+    """
+
+    MONTH_WEIGHTS = [3, 2, 1]
 
     def __init__(self, db: Session):
         self.db = db
@@ -25,8 +23,8 @@ class Forecaster:
 
         Steps:
         1. Get the forecast heats per product group for target month
-        2. Calculate historical production ratios per grade within each group
-        3. Distribute heats proportionally
+        2. Calculate weighted historical production per grade
+        3. Distribute heats proportionally based on weighted totals
         """
         results: list[GradeForecast] = []
 
@@ -38,75 +36,108 @@ class Forecaster:
         )
 
         for forecast in forecasts:
-            grade_forecasts = self._process_product_group(forecast)
+            grade_forecasts = self._process_product_group(forecast, target_month)
             results.extend(grade_forecasts)
 
         return results
 
-    def _process_product_group(self, forecast: MonthlyForecast) -> list[GradeForecast]:
+    def _get_month_weight(self, production_month: date, target_month: date) -> float:
+        """Calculate weight for a historical month based on recency."""
+        months_ago = (target_month.year - production_month.year) * 12 + (
+            target_month.month - production_month.month
+        )
+
+        if months_ago <= 0 or months_ago > len(self.MONTH_WEIGHTS):
+            return self.MONTH_WEIGHTS[-1]  # Default to lowest weight
+
+        return self.MONTH_WEIGHTS[months_ago - 1]
+
+    def _process_product_group(
+        self, forecast: MonthlyForecast, target_month: date
+    ) -> list[GradeForecast]:
         """Process a single product group and return grade forecasts."""
         group_id = forecast.product_group_id
         group_name: str = forecast.product_group.name  # type: ignore
         total_heats: int = forecast.heats  # type: ignore
 
-        grade_totals = (
+        # Get production history with month info for weighting
+        history = (
             self.db.query(
-                SteelGrade.name, func.sum(ProductionHistory.tons).label("total_tons")
+                SteelGrade.name,
+                ProductionHistory.month,
+                ProductionHistory.tons,
             )
             .join(ProductionHistory)
             .filter(SteelGrade.product_group_id == group_id)
-            .group_by(SteelGrade.id)
             .all()
         )
 
-        if not grade_totals:
+        if not history:
             return []
 
-        group_total_tons = sum(g.total_tons or 0 for g in grade_totals)
+        # Calculate weighted totals per grade
+        grade_weighted_totals: dict[str, float] = {}
+        for record in history:
+            weight = self._get_month_weight(record.month, target_month)
+            weighted_tons = (record.tons or 0) * weight
+            grade_weighted_totals[record.name] = (
+                grade_weighted_totals.get(record.name, 0) + weighted_tons
+            )
 
-        if group_total_tons == 0:
-            return self._distribute_equally(grade_totals, group_name, total_heats)
+        group_weighted_total = sum(grade_weighted_totals.values())
+
+        if group_weighted_total == 0:
+            return self._distribute_equally(
+                list(grade_weighted_totals.keys()), group_name, total_heats
+            )
         else:
             return self._distribute_proportionally(
-                grade_totals, group_name, total_heats, group_total_tons
+                grade_weighted_totals, group_name, total_heats, group_weighted_total
             )
 
     def _distribute_equally(
-        self, grade_totals: list, group_name: str, total_heats: int
+        self, grades: list[str], group_name: str, total_heats: int
     ) -> list[GradeForecast]:
         """Distribute heats equally when no historical data exists."""
-        heats_per_grade = int(total_heats) // len(grade_totals)
+        heats_per_grade = int(total_heats) // len(grades)
         return [
-            GradeForecast(
-                grade=grade.name, product_group=group_name, heats=heats_per_grade
-            )
-            for grade in grade_totals
+            GradeForecast(grade=grade, product_group=group_name, heats=heats_per_grade)
+            for grade in grades
         ]
 
     def _distribute_proportionally(
         self,
-        grade_totals: list,
+        grade_weighted_totals: dict[str, float],
         group_name: str,
         total_heats: int,
-        group_total_tons: float,
+        group_weighted_total: float,
     ) -> list[GradeForecast]:
-        """Distribute heats based on historical production ratios."""
-        results: list[GradeForecast] = []
-        allocated = 0
-        grade_list = list(grade_totals)
+        """Distribute heats based on weighted historical production ratios."""
         total_heats_int = int(total_heats)
+        grades = list(grade_weighted_totals.items())
 
-        for i, grade in enumerate(grade_list):
-            ratio = (grade.total_tons or 0) / group_total_tons
+        # Calculate raw (non-rounded) allocations and sort by remainder descending
+        allocations: list[tuple[str, int, float]] = []
+        for grade_name, weighted_tons in grades:
+            ratio = weighted_tons / group_weighted_total
+            raw = ratio * total_heats_int
+            floored = int(raw)
+            remainder = raw - floored
+            allocations.append((grade_name, floored, remainder))
 
-            if i == len(grade_list) - 1:
-                heats = total_heats_int - allocated
-            else:
-                heats = round(ratio * total_heats_int)
-                allocated += heats
+        # Sum of floored values
+        floored_total = sum(a[1] for a in allocations)
+        leftover = total_heats_int - floored_total
 
+        # Sort by remainder descending to distribute leftover fairly
+        allocations.sort(key=lambda x: x[2], reverse=True)
+
+        # Distribute leftover one heat at a time to grades with highest remainders
+        results: list[GradeForecast] = []
+        for i, (grade_name, floored, _) in enumerate(allocations):
+            heats = floored + (1 if i < leftover else 0)
             results.append(
-                GradeForecast(grade=grade.name, product_group=group_name, heats=heats)
+                GradeForecast(grade=grade_name, product_group=group_name, heats=heats)
             )
 
         return results

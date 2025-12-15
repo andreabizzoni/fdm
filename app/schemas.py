@@ -1,9 +1,36 @@
-"""
-Pydantic schemas for API request/response validation.
-"""
-
 from datetime import date, time
 from pydantic import BaseModel
+
+
+# ============================================================================
+# Parser Record Schemas
+# ============================================================================
+
+
+class DailyScheduleRecord(BaseModel):
+    """Represents a single heat from the daily schedule."""
+
+    date: date
+    start_time: time
+    grade: str
+    mould_size: str | None = None
+
+
+class MonthlyForecastRecord(BaseModel):
+    """Represents a monthly forecast for a product group."""
+
+    product_group: str
+    month: date
+    heats: int
+
+
+class ProductionHistoryRecord(BaseModel):
+    """Represents historical production for a steel grade."""
+
+    product_group: str
+    grade: str
+    month: date
+    tons: float
 
 
 # ============================================================================
