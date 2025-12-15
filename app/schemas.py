@@ -33,6 +33,7 @@ class GradeForecast(BaseModel):
     """Forecast for a single steel grade."""
 
     grade: str
+    product_group: str
     heats: int
 
 

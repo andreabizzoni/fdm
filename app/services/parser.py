@@ -12,7 +12,6 @@ from typing import BinaryIO
 import pandas as pd
 from pydantic import BaseModel
 
-# Type alias for file input - accepts file path or binary file object
 FileInput = str | Path | BinaryIO
 
 
