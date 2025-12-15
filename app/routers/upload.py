@@ -30,7 +30,7 @@ def get_or_create_product_group(db: Session, name: str) -> ProductGroup:
     if not product_group:
         product_group = ProductGroup(name=name)
         db.add(product_group)
-        db.flush()  # Get the ID without committing
+        db.flush()
     return product_group
 
 
@@ -64,21 +64,17 @@ async def upload_daily_schedule(
         )
 
     try:
-        # Parse the uploaded file
         records = Parser.parse_daily_schedule(file.file)
 
         if not records:
             raise HTTPException(
                 status_code=400,
-                detail="No valid records found in the uploaded file",
+                detail="Error parsing the file, please ensure it follows the template",
             )
 
-        # Clear existing daily schedules
         db.query(DailySchedule).delete()
 
-        # Process each record
         for record in records:
-            # Try to find the product group for this grade
             product_group_name = Parser.get_product_group_for_grade(record.grade)
 
             if product_group_name:
@@ -89,7 +85,6 @@ async def upload_daily_schedule(
                     product_group.id,  # type: ignore
                 )
             else:
-                # Grade not in known mapping - create with "Unknown" product group
                 product_group = get_or_create_product_group(db, "Unknown")
                 steel_grade = get_or_create_steel_grade(
                     db,
@@ -97,7 +92,6 @@ async def upload_daily_schedule(
                     product_group.id,  # type: ignore
                 )
 
-            # Create the daily schedule record
             schedule = DailySchedule(
                 date=record.date,
                 start_time=record.start_time,
@@ -141,7 +135,6 @@ async def upload_monthly_forecast(
         )
 
     try:
-        # Parse the uploaded file
         records = Parser.parse_monthly_forecast(file.file)
 
         if not records:
@@ -150,10 +143,8 @@ async def upload_monthly_forecast(
                 detail="No valid records found in the uploaded file",
             )
 
-        # Clear existing monthly forecasts
         db.query(MonthlyForecast).delete()
 
-        # Process each record
         for record in records:
             product_group = get_or_create_product_group(db, record.product_group)
 
@@ -199,7 +190,6 @@ async def upload_production_history(
         )
 
     try:
-        # Parse the uploaded file
         records = Parser.parse_production_history(file.file)
 
         if not records:
@@ -208,10 +198,8 @@ async def upload_production_history(
                 detail="No valid records found in the uploaded file",
             )
 
-        # Clear existing production history
         db.query(ProductionHistory).delete()
 
-        # Process each record
         for record in records:
             product_group = get_or_create_product_group(db, record.product_group)
             steel_grade = get_or_create_steel_grade(db, record.grade, product_group.id)  # type: ignore
