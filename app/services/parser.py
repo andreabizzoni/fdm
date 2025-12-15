@@ -16,7 +16,6 @@ FileInput = str | Path | BinaryIO
 class Parser:
     """Parser for Excel files containing steel production data."""
 
-    # Product group to steel grade mapping for validation/lookup
     PRODUCT_GROUP_MAPPING = {
         "Rebar": ["B500A", "B500B", "B500C"],
         "MBQ": ["A36", "A5888", "GR50", "44W", "50W", "55W", "60W"],
