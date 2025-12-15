@@ -2,12 +2,12 @@
 Forecast endpoints.
 
 Endpoints:
-- GET /forecast/september - Generate September forecast for ScrapChef
+- GET /forecast/{year}/{month} - Generate forecast for ScrapChef
 """
 
 from datetime import date
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -16,22 +16,32 @@ from app.services.forecast import calculate_forecast
 
 router = APIRouter(prefix="/forecast", tags=["forecast"])
 
-# September 2024 target month
-SEPTEMBER_2024 = date(2024, 9, 1)
+AVAILABLE_FORECASTS = {(2024, 9)}
 
 
-@router.get("/september", response_model=ForecastResponse)
-def get_september_forecast(db: Session = Depends(get_db)):
+@router.get("/{year}/{month}", response_model=ForecastResponse)
+def get_forecast(year: int, month: int, db: Session = Depends(get_db)):
     """
-    Generate September 2024 forecast for ScrapChef.
+    Generate forecast for ScrapChef.
 
     Returns heat distribution by steel grade based on:
     - Monthly forecast heats per product group
     - Historical production ratios per grade
-    """
-    forecasts = calculate_forecast(db, SEPTEMBER_2024)
 
+    Note: Only September 2024 forecast is currently available.
+    """
+    if (year, month) not in AVAILABLE_FORECASTS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Forecast for {year}/{month:02d} is not available. "
+            "This version only supports September 2024 (2024/9).",
+        )
+
+    target_month = date(year, month, 1)
+    forecasts = calculate_forecast(db, target_month)
+
+    month_name = target_month.strftime("%B %Y")
     return ForecastResponse(
-        month="September 2024",
+        month=month_name,
         forecasts=forecasts,
     )
