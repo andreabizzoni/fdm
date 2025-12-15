@@ -1,10 +1,3 @@
-"""
-Forecast endpoints.
-
-Endpoints:
-- GET /forecast/{year}/{month} - Generate forecast for ScrapChef
-"""
-
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -12,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.schemas import ForecastResponse
-from app.services.forecast import calculate_forecast
+from app.services.forecast import Forecaster
 
 router = APIRouter(prefix="/forecast", tags=["forecast"])
 
@@ -38,7 +31,8 @@ def get_forecast(year: int, month: int, db: Session = Depends(get_db)):
         )
 
     target_month = date(year, month, 1)
-    forecasts = calculate_forecast(db, target_month)
+    forecaster = Forecaster(db)
+    forecasts = forecaster.calculate(target_month)
 
     month_name = target_month.strftime("%B %Y")
     return ForecastResponse(

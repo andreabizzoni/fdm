@@ -1,12 +1,3 @@
-"""
-Upload endpoints for Excel file processing.
-
-Endpoints:
-- POST /upload/daily-schedule - Upload daily charge schedule file
-- POST /upload/monthly-forecast - Upload product groups monthly file
-- POST /upload/production-history - Upload steel grade production file
-"""
-
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
